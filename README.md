@@ -80,7 +80,10 @@ TELEGRAM_CHAT_ID = "..."
 
 1. **Assurez-vous qu'AdsPower est ouvert.**
 2. Ouvrez un terminal (ou invite de commande) dans le dossier contenant le script.
-3. Lancez le script avec la commande :
+3. **Activez l'environnement virtuel** (si vous en avez créé un) :
+   - Sous Windows : `venv\Scripts\activate`
+   - Sous Mac/Linux : `source venv/bin/activate`
+4. Lancez le script avec la commande :
    ```bash
    python check_fb_bans.py
    ```
