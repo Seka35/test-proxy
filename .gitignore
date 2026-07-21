@@ -1,0 +1,7 @@
+credentials.json
+proxies_cut.txt
+fb_issues.txt
+access
+venv/
+__pycache__/
+*.pyc
