@@ -54,9 +54,11 @@ def get_adspower_profiles():
                         break # Plus aucun profil à récupérer
                     
                     for p in list_data:
-                        fb_id = str(p.get("username", "")).strip()
-                        if fb_id:
-                            profiles[fb_id] = {
+                        proxy_config = p.get("user_proxy_config", {})
+                        proxy_ip = proxy_config.get("proxy_host", "").strip()
+                        
+                        if proxy_ip:
+                            profiles[proxy_ip] = {
                                 "user_id": p.get("user_id"),
                                 "name": p.get("name"),           # ND 31 du 18/07/26
                                 "account_name": p.get("password") # VLteam16032026
@@ -177,12 +179,21 @@ def main():
         if not row or len(row) < 3:
             continue
             
-        fb_id = str(row[2]).strip()
-        if not fb_id or fb_id.lower() == "sans_id":
+        proxy_string = str(row[0]).strip() # Colonne A
+        fb_id = str(row[2]).strip()        # Colonne C (pour l'affichage et Google Sheet)
+        
+        if not proxy_string or not fb_id or fb_id.lower() == "sans_id":
             continue
             
-        if fb_id in profiles:
-            tasks.append((i, fb_id, profiles[fb_id]))
+        # Extraire l'IP (avant le premier deux-points)
+        sheet_ip = ""
+        if ":" in proxy_string:
+            sheet_ip = proxy_string.split(":")[0].strip()
+        else:
+            sheet_ip = proxy_string
+            
+        if sheet_ip and sheet_ip in profiles:
+            tasks.append((i, fb_id, profiles[sheet_ip]))
             
     print(f"⚡ {len(tasks)} profils à vérifier. Lancement de {THREADS} navigateurs en parallèle...")
     
