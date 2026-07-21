@@ -31,6 +31,7 @@ Le script lit et met à jour un fichier Google Sheets. Pour des raisons de sécu
 
 1. Rendez-vous sur la [Google Cloud Console](https://console.cloud.google.com/).
 2. Créez un nouveau projet (ou utilisez un projet existant).
+   *(Note : S'il demande une organisation, sélectionnez **"Aucune organisation"** ou "No organization" dans le champ Emplacement/Location).*
 3. Allez dans **API et services > Bibliothèque**.
 4. Cherchez et **Activez** ces deux APIs :
    - `Google Sheets API`
