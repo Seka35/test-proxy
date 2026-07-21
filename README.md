@@ -14,14 +14,7 @@ Ce document explique comment configurer et lancer le script de vérification des
    cd test-proxy
    ```
 2. **Python 3** doit être installé sur la machine.
-3. (Optionnel mais recommandé) Créer et activer un environnement virtuel (`venv`) :
-   - Sous Windows : `python -m venv venv` puis `venv\Scripts\activate`
-   - Sous Mac/Linux : `python3 -m venv venv` puis `source venv/bin/activate`
-4. Les dépendances Python doivent être installées. Depuis le dossier du script, lancez la commande suivante dans le terminal :
-   ```bash
-   pip install requests gspread oauth2client selenium
-   ```
-4. **Activer l'API Locale d'AdsPower** :
+3. **Activer l'API Locale d'AdsPower** :
    - Ouvrez AdsPower.
    - Allez dans **Paramètres (Settings)** -> **API locale**.
    - Cochez la case pour l'activer.
@@ -76,18 +69,12 @@ TELEGRAM_CHAT_ID = "..."
 
 ---
 
-## 🚀 4. Lancement du Script
+## 🚀 4. Lancement du Script (Automatisé)
 
 1. **Assurez-vous qu'AdsPower est ouvert.**
-2. Ouvrez un terminal (ou invite de commande) dans le dossier contenant le script.
-3. **Activez l'environnement virtuel** (si vous en avez créé un) :
-   - Sous Windows : `venv\Scripts\activate`
-   - Sous Mac/Linux : `source venv/bin/activate`
-4. Lancez le script avec la commande :
-   ```bash
-   python check_fb_bans.py
-   ```
-   *(Si vous êtes sur Mac ou Linux, utilisez `python3 check_fb_bans.py`)*
+2. Selon votre système d'exploitation, utilisez le script de lancement automatique (qui se chargera de créer l'environnement virtuel, d'installer les dépendances et de lancer le bot) :
+   - **Sous Windows** : Double-cliquez sur le fichier `run_checker.bat` (ou lancez-le depuis un terminal).
+   - **Sous Mac/Linux** : Lancez le script dans le terminal avec `./run_checker.sh` (assurez-vous qu'il soit exécutable avec `chmod +x run_checker.sh`).
 
 Le script va automatiquement :
 - Se connecter à AdsPower et récupérer les profils.
