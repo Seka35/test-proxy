@@ -202,7 +202,16 @@ def process_profile(i, fb_id, p_data):
     profile_name = p_data["name"]
     
     log_msg(f"[{i}] 🔍 Démarrage : {fb_id} ({profile_name})...")
-    status = check_facebook_status(user_id)
+    
+    status = "Erreur Inconnue"
+    for attempt in range(3):
+        status = check_facebook_status(user_id)
+        if status not in ["Erreur Lancement", "Erreur Driver", "Erreur Selenium", "Erreur Inconnue"]:
+            break # Succès ou statut clair (Actif, Checkpoint, etc.)
+        if attempt < 2:
+            log_msg(f"[{i}] ⚠️ {status} ({fb_id}). Réessai {attempt+2}/3 dans 5s...")
+            time.sleep(5)
+            
     log_msg(f"[{i}] ➔ Résultat : {status} ({fb_id})")
     
     # Statut avec pastille pour Google Sheet
