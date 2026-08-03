@@ -1,4 +1,5 @@
 import time
+import threading
 import requests
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -26,6 +27,10 @@ TELEGRAM_BOT_TOKEN = "8825297135:AAHO28B34QLjwI-hwjnpv1W2i7dw8dD13ZQ"
 TELEGRAM_CHAT_ID = "-1003924268016"
 # =================================================
 
+# Lock global pour respecter la limite 1 req/sec sur browser/start et browser/stop
+BROWSER_API_LOCK = threading.Lock()
+BROWSER_API_DELAY = 1.1  # secondes entre chaque appel browser/start ou browser/stop
+
 from datetime import datetime
 
 def send_telegram_report(message, file_path=None):
@@ -48,48 +53,63 @@ def send_telegram_report(message, file_path=None):
 
 def get_adspower_profiles():
     log_msg("⏳ Récupération de tous les profils AdsPower (cela peut prendre quelques secondes)...")
+    # IP → liste de profils (plusieurs profils peuvent partager la même IP)
     profiles = {}
     page = 1
-    page_size = 500
+    page_size = 100  # Plus petit pour éviter le rate limit
     
     while True:
         try:
-            resp = requests.get(f"{ADS_API}/user/list?page={page}&page_size={page_size}")
+            resp = requests.get(f"{ADS_API}/user/list?page={page}&page_size={page_size}", timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("code") == 0:
                     list_data = data.get("data", {}).get("list", [])
                     if not list_data:
-                        break # Plus aucun profil à récupérer
+                        break  # Plus aucun profil à récupérer
                     
                     for p in list_data:
                         proxy_config = p.get("user_proxy_config", {})
                         proxy_ip = proxy_config.get("proxy_host", "").strip()
                         
                         if proxy_ip:
-                            profiles[proxy_ip] = {
+                            profile_entry = {
                                 "user_id": p.get("user_id"),
-                                "name": p.get("name"),           # ND 31 du 18/07/26
-                                "account_name": p.get("password") # VLteam16032026
+                                "name": p.get("name"),
                             }
+                            if proxy_ip not in profiles:
+                                profiles[proxy_ip] = []
+                            profiles[proxy_ip].append(profile_entry)
+                    
+                    log_msg(f"  ... page {page} : {len(list_data)} profils récupérés")
                     page += 1
+                    time.sleep(0.2)  # 5 req/sec autorisés pour 200-5000 profils
+                    
+                elif "too many request" in data.get("msg", "").lower():
+                    # Rate limit hit — on attend et on réessaie la même page
+                    log_msg(f"  ⏳ Rate limit AdsPower — attente 3s avant réessai page {page}...")
+                    time.sleep(3)
                 else:
-                    log_msg(f"❌ Erreur API: {data.get('msg')}")
+                    log_msg(f"❌ Erreur API AdsPower: {data.get('msg')}")
                     break
             else:
+                log_msg(f"❌ HTTP {resp.status_code} depuis AdsPower")
                 break
         except Exception as e:
             log_msg(f"❌ Erreur de connexion à AdsPower: {e}")
             break
-            
-    log_msg(f"✅ {len(profiles)} profils indexés avec succès.")
+
+    total = sum(len(v) for v in profiles.values())
+    log_msg(f"✅ {total} profils indexés sur {len(profiles)} IPs uniques.")
     return profiles
 
 def check_facebook_status(user_id):
     """ Ouvre le profil, check FB, et ferme le profil. """
-    # 1. Démarrer le navigateur
-    start_url = f"{ADS_API}/browser/start?user_id={user_id}"
-    resp = requests.get(start_url)
+    # 1. Démarrer le navigateur (sérialisé : 1 req/sec max sur browser/start)
+    with BROWSER_API_LOCK:
+        start_url = f"{ADS_API}/browser/start?user_id={user_id}"
+        resp = requests.get(start_url)
+        time.sleep(BROWSER_API_DELAY)
     
     if resp.status_code != 200 or resp.json().get("code") != 0:
         return "Erreur Lancement"
@@ -132,36 +152,51 @@ def check_facebook_status(user_id):
     except Exception as e:
         status = "Erreur Selenium"
     finally:
-        # 5. Fermer l'onglet (optionnel) et le profil AdsPower
+        # 5. Fermer le profil AdsPower (sérialisé : 1 req/sec max sur browser/stop)
         if driver:
             try:
                 driver.quit()
             except:
                 pass
-        # Ordre à AdsPower de fermer le profil
-        requests.get(f"{ADS_API}/browser/stop?user_id={user_id}")
+        with BROWSER_API_LOCK:
+            requests.get(f"{ADS_API}/browser/stop?user_id={user_id}")
+            time.sleep(BROWSER_API_DELAY)
         
     return status
 
 import concurrent.futures
 
+STATUS_EMOJI = {
+    'Actif':       '🟢 Actif',
+    'Checkpoint':  '🟠 Checkpoint',
+    'Banni':       '🔴 Banni',
+    'Déconnecté':  '🔴 Déconnecté',
+}
+
 def process_profile(i, fb_id, p_data):
     user_id = p_data["user_id"]
     profile_name = p_data["name"]
-    account_name = p_data["account_name"]
     
     log_msg(f"[{i}] 🔍 Démarrage : {fb_id} ({profile_name})...")
     status = check_facebook_status(user_id)
     log_msg(f"[{i}] ➔ Résultat : {status} ({fb_id})")
     
+    # Statut avec pastille pour Google Sheet
+    status_display = STATUS_EMOJI.get(status, f'⚪ {status}')
+    
     return {
         'fb_id': fb_id,
-        'status': status,
-        'account_name': account_name,
+        'status': status,          # brut → pour le rapport Telegram
         'profile_name': profile_name,
-        'update_dict': {
-            'range': f'H{i}:J{i}',
-            'values': [[status, account_name, profile_name]]
+        # Colonne I (mot de passe) volontairement EXCLUE
+        # On écrit H=STATUS, on saute I, on écrit J=PROFILE_NAME
+        'update_dict_h': {
+            'range': f'H{i}',
+            'values': [[status_display]]  # avec emoji
+        },
+        'update_dict_j': {
+            'range': f'J{i}',
+            'values': [[profile_name]]
         }
     }
 
@@ -204,9 +239,19 @@ def main(log_cb=None, prog_cb=None):
             sheet_ip = proxy_string.split(":")[0].strip()
         else:
             sheet_ip = proxy_string
-            
+
         if sheet_ip and sheet_ip in profiles:
-            tasks.append((i, fb_id, profiles[sheet_ip]))
+            # Une IP peut avoir plusieurs profils AdsPower — on prend le premier qui correspond
+            matching_profiles = profiles[sheet_ip]
+            # On cherche si le fb_id est mentionné dans le nom du profil, sinon on prend le 1er
+            chosen = matching_profiles[0]
+            for mp in matching_profiles:
+                if fb_id in mp.get("name", ""):
+                    chosen = mp
+                    break
+            tasks.append((i, fb_id, chosen))
+        else:
+            log_msg(f"⚠️  Ligne {i} : IP '{sheet_ip}' introuvable dans AdsPower (FB: {fb_id})")
             
     total_tasks = len(tasks)
     log_msg(f"⚡ {total_tasks} profils à vérifier. Lancement de {THREADS} navigateurs en parallèle...")
@@ -228,7 +273,9 @@ def main(log_cb=None, prog_cb=None):
             try:
                 result = future.result()
                 if result:
-                    updates.append(result['update_dict'])
+                    # H = statut, J = nom profil (I = mot de passe EXCLU)
+                    updates.append(result['update_dict_h'])
+                    updates.append(result['update_dict_j'])
                     results_data.append(result)
             except Exception as e:
                 log_msg(f"❌ Erreur thread: {e}")
