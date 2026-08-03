@@ -29,7 +29,7 @@ TELEGRAM_CHAT_ID = "-1003924268016"
 
 # Lock global pour respecter la limite 1 req/sec sur browser/start et browser/stop
 BROWSER_API_LOCK = threading.Lock()
-BROWSER_API_DELAY = 1.1  # secondes entre chaque appel browser/start ou browser/stop
+BROWSER_API_DELAY = 2.0  # secondes entre chaque appel browser/start ou browser/stop (augmenté par sécurité)
 
 from datetime import datetime
 
@@ -106,12 +106,33 @@ def get_adspower_profiles():
 def check_facebook_status(user_id):
     """ Ouvre le profil, check FB, et ferme le profil. """
     # 1. Démarrer le navigateur (sérialisé : 1 req/sec max sur browser/start)
-    with BROWSER_API_LOCK:
-        start_url = f"{ADS_API}/browser/start?user_id={user_id}"
-        resp = requests.get(start_url)
-        time.sleep(BROWSER_API_DELAY)
+    start_url = f"{ADS_API}/browser/start?user_id={user_id}"
+    resp = None
+    success = False
     
-    if resp.status_code != 200 or resp.json().get("code") != 0:
+    for attempt in range(3):
+        with BROWSER_API_LOCK:
+            try:
+                resp = requests.get(start_url, timeout=30)
+            except Exception as e:
+                log_msg(f"  ❌ Erreur connexion lancement ({user_id}): {e}")
+                resp = None
+            time.sleep(BROWSER_API_DELAY)
+            
+        if resp and resp.status_code == 200:
+            resp_json = resp.json()
+            if resp_json.get("code") == 0:
+                success = True
+                break
+            else:
+                log_msg(f"  ⚠️ AdsPower msg ({user_id}) [Essai {attempt+1}/3]: {resp_json.get('msg')}")
+                time.sleep(3)
+        else:
+            status_code = resp.status_code if resp else "Timeout/Erreur"
+            log_msg(f"  ⚠️ HTTP Error ({user_id}) [Essai {attempt+1}/3]: {status_code}")
+            time.sleep(3)
+    
+    if not success:
         return "Erreur Lancement"
     
     data = resp.json().get("data", {})
@@ -159,7 +180,10 @@ def check_facebook_status(user_id):
             except:
                 pass
         with BROWSER_API_LOCK:
-            requests.get(f"{ADS_API}/browser/stop?user_id={user_id}")
+            try:
+                requests.get(f"{ADS_API}/browser/stop?user_id={user_id}", timeout=10)
+            except:
+                pass
             time.sleep(BROWSER_API_DELAY)
         
     return status
