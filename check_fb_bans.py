@@ -339,50 +339,51 @@ def main(log_cb=None, prog_cb=None):
                 
     log_msg("✅ Vérification et sauvegarde terminées !")
         
-        # =================================================
-        # Génération et Envoi du Rapport Telegram
-        # =================================================
-        log_msg("🚀 Préparation du rapport Telegram...")
-        actif_count = sum(1 for r in results_data if r['status'] == 'Actif')
-        checkpoint_count = sum(1 for r in results_data if r['status'] == 'Checkpoint')
-        banni_count = sum(1 for r in results_data if r['status'] == 'Banni')
-        erreur_count = sum(1 for r in results_data if r['status'] not in ['Actif', 'Checkpoint', 'Banni'])
-        
-        issues_list = []
-        for r in results_data:
-            st = r['status']
-            if st != 'Actif':
-                if st == "Checkpoint":
-                    pastille = "🟡 CHECKPOINT"
-                elif st == "Banni":
-                    pastille = "🔴 BANNI"
-                else:
-                    pastille = f"⚪ ERREUR ({st})"
-                issues_list.append(f"[{pastille}] FB: {r['fb_id']} | Compte: {r['account_name']} | Profil: {r['profile_name']}")
-                
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        report_msg = (
-            f"📊 *Rapport de vérification Facebook (AdsPower)*\n\n"
-            f"🟢 Actif : {actif_count}\n"
-            f"🟡 Checkpoint : {checkpoint_count}\n"
-            f"🔴 Banni : {banni_count}\n"
-            f"⚪ Erreur : {erreur_count}\n\n"
-            f"🔄 Total vérifiés : {len(results_data)}\n"
-            f"🕒 Heure : {now}"
-        )
-        
-        file_name = None
-        if issues_list:
-            file_name = "fb_issues.txt"
-            with open(file_name, "w", encoding="utf-8") as f:
-                f.write("LISTE DES COMPTES À VÉRIFIER (CHECKPOINT / BANNI / ERREUR)\n")
-                f.write("============================================================\n\n")
-                f.write("\n".join(issues_list))
-                
-        send_telegram_report(report_msg, file_path=file_name)
-        log_msg("✅ Rapport Telegram envoyé dans le groupe !")
-    else:
-        log_msg("Aucune mise à jour à faire.")
+    # =================================================
+    # Génération et Envoi du Rapport Telegram
+    # =================================================
+    log_msg("🚀 Préparation du rapport Telegram...")
+    actif_count = sum(1 for r in results_data if r['status'] == 'Actif')
+    checkpoint_count = sum(1 for r in results_data if r['status'] == 'Checkpoint')
+    banni_count = sum(1 for r in results_data if r['status'] == 'Banni')
+    erreur_count = sum(1 for r in results_data if r['status'] not in ['Actif', 'Checkpoint', 'Banni'])
+    
+    issues_list = []
+    for r in results_data:
+        st = r['status']
+        if st != 'Actif':
+            if st == "Checkpoint":
+                pastille = "🟡 CHECKPOINT"
+            elif st == "Banni":
+                pastille = "🔴 BANNI"
+            else:
+                pastille = f"⚪ ERREUR ({st})"
+            
+            # Using get() for account_name since it might not be in the dict if it's an error
+            account_name = r.get('account_name', 'Inconnu')
+            issues_list.append(f"[{pastille}] FB: {r['fb_id']} | Compte: {account_name} | Profil: {r['profile_name']}")
+            
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    report_msg = (
+        f"📊 *Rapport de vérification Facebook (AdsPower)*\n\n"
+        f"🟢 Actif : {actif_count}\n"
+        f"🟡 Checkpoint : {checkpoint_count}\n"
+        f"🔴 Banni : {banni_count}\n"
+        f"⚪ Erreur : {erreur_count}\n\n"
+        f"🔄 Total vérifiés : {len(results_data)}\n"
+        f"🕒 Heure : {now}"
+    )
+    
+    file_name = None
+    if issues_list:
+        file_name = "fb_issues.txt"
+        with open(file_name, "w", encoding="utf-8") as f:
+            f.write("LISTE DES COMPTES À VÉRIFIER (CHECKPOINT / BANNI / ERREUR)\n")
+            f.write("============================================================\n\n")
+            f.write("\n".join(issues_list))
+            
+    send_telegram_report(report_msg, file_path=file_name)
+    log_msg("✅ Rapport Telegram envoyé dans le groupe !")
 
 if __name__ == "__main__":
     main()
