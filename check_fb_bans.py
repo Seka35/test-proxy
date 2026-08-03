@@ -172,6 +172,9 @@ def check_facebook_status(user_id):
             
     except Exception as e:
         status = "Erreur Selenium"
+        # On garde uniquement la première ligne de l'erreur pour ne pas polluer l'écran avec la stacktrace
+        error_msg = str(e).split('\n')[0]
+        log_msg(f"  ❌ Exception Selenium ({user_id}): {error_msg[:150]}")
     finally:
         # 5. Fermer le profil AdsPower (sérialisé : 1 req/sec max sur browser/stop)
         if driver:
@@ -294,6 +297,8 @@ def main(log_cb=None, prog_cb=None):
     
     updates = []
     results_data = []
+    pending_updates = []
+    
     # Lancement du multithreading
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
         futures = [executor.submit(process_profile, i, fb_id, p_data) for i, fb_id, p_data in tasks]
@@ -309,21 +314,30 @@ def main(log_cb=None, prog_cb=None):
                     # H = statut, J = nom profil (I = mot de passe EXCLU)
                     updates.append(result['update_dict_h'])
                     updates.append(result['update_dict_j'])
+                    pending_updates.append(result['update_dict_h'])
+                    pending_updates.append(result['update_dict_j'])
                     results_data.append(result)
+                    
+                    # 💾 Sauvegarde progressive toutes les 10 vérifications (20 cellules)
+                    if len(pending_updates) >= 20:
+                        try:
+                            sheet.batch_update(pending_updates)
+                            pending_updates = []
+                            time.sleep(0.5) # Limite API Google
+                        except Exception as e:
+                            log_msg(f"❌ Erreur Sauvegarde Google Sheets: {e}")
+                            
             except Exception as e:
                 log_msg(f"❌ Erreur thread: {e}")
                 
-    # Mise à jour globale Google Sheets
-    if updates:
-        log_msg("💾 Sauvegarde de tous les résultats dans Google Sheets en une seule fois...")
-        # Pour éviter l'erreur de payload trop lourd, on met à jour par blocs de 100
-        for chunk in [updates[x:x+100] for x in range(0, len(updates), 100)]:
+        # Sauvegarder ce qu'il reste à la toute fin du thread pool
+        if pending_updates:
             try:
-                sheet.batch_update(chunk)
-                time.sleep(1)
+                sheet.batch_update(pending_updates)
             except Exception as e:
-                log_msg(f"❌ Erreur lors de la mise à jour par lot: {e}")
-        log_msg("✅ Terminé avec succès !")
+                pass
+                
+    log_msg("✅ Vérification et sauvegarde terminées !")
         
         # =================================================
         # Génération et Envoi du Rapport Telegram
