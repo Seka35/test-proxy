@@ -259,7 +259,7 @@ def main(log_cb=None, prog_cb=None):
     
     tasks = []
     # On va parcourir chaque ligne à partir de la ligne 2
-    for i, row in enumerate(records[1:], start=2):
+    for i, row in enumerate(records[800:], start=801):
         if not row or len(row) < 3:
             continue
             
@@ -320,9 +320,10 @@ def main(log_cb=None, prog_cb=None):
                     
                     # 💾 Sauvegarde progressive toutes les 10 vérifications (20 cellules)
                     if len(pending_updates) >= 20:
+                        current_batch = list(pending_updates)
+                        pending_updates = [] # On vide immédiatement pour éviter la boucle d'erreurs
                         try:
-                            sheet.batch_update(pending_updates)
-                            pending_updates = []
+                            sheet.batch_update(current_batch)
                             time.sleep(0.5) # Limite API Google
                         except Exception as e:
                             log_msg(f"❌ Erreur Sauvegarde Google Sheets: {e}")
